@@ -3,6 +3,7 @@ torch==1.8.1
 torchvision==0.9.1
 pytorch-lightning>=1.2.10
 torchmetrics
+torchaudio
 
 # --------- hydra --------- #
 hydra-core==1.1.0.dev6
@@ -13,7 +14,7 @@ hydra-optuna-sweeper==1.1.0.dev1
 
 # --------- loggers --------- #
 wandb>=0.10.28
-# neptune-client
+neptune-client
 # comet-ml
 # mlflow
 
@@ -27,5 +28,7 @@ scikit-learn
 pandas
 matplotlib
 seaborn
+sklearn
+tqdm
 # pudb
 # dvc
