@@ -4,8 +4,8 @@ import torch
 import torch.nn as nn
 import torchvision
 from pytorch_lightning import LightningModule
-from pytorch_lightning.metrics.classification import F1, Accuracy, Precision, Recall
 from src.models.modules.audio_preprocessing import AudioPreprocess
+from src.utils.metric_utils import get_f1, metric_to_dict
 
 
 class AudioLitModel(LightningModule):
@@ -25,7 +25,7 @@ class AudioLitModel(LightningModule):
 
     def __init__(
         self,
-        classes: [],
+        classes: List,
         lr: float = 0.001,
         weight_decay: float = 0.0005,
         data_dir: str = "data/",
@@ -75,57 +75,20 @@ class AudioLitModel(LightningModule):
 
         # loss function
         self.criterion = nn.BCEWithLogitsLoss()
-
+        self.loss_hist = {
+            "train": [],
+            "val": [],
+            "test":[]
+        }
         # use separate metric instance for train, val and test step
         # to ensure a proper reduction over the epoch
-        self.train_accuracy = Accuracy()
-        self.val_accuracy = Accuracy()
-        self.test_accuracy = Accuracy()
-
-        self.train_precision = Precision(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-        self.val_precision = Precision(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-        self.test_precision = Precision(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-
-        self.train_recall = Recall(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-        self.val_recall = Recall(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-        self.test_recall = Recall(
-            num_classes=self.num_classes, average=None, multilabel=True
-        )
-
-        self.train_f1 = F1(num_classes=self.num_classes, average=None, multilabel=True)
-        self.val_f1 = F1(num_classes=self.num_classes, average=None, multilabel=True)
-        self.test_f1 = F1(num_classes=self.num_classes, average=None, multilabel=True)
-
-        self.metric_hist = {
-            "train/acc": [],
-            "val/acc": [],
-            "train/loss": [],
-            "val/loss": [],
-            "train/f1": [],
-            "val/f1": [],
-            "train/prec": [],
-            "val/prec": [],
-            "train/rec": [],
-            "val/rec": [],
+        self.f1_train, self.f1_val, self.f1_test = get_f1(self.num_classes)
+        self.f1_hist = {
+            "train": [],
+            "val": [],
+            "test":[]
         }
 
-    def metric_to_dict(self, metric):
-        try:
-            metric_dict = {self.classes[i]: _ for i, _ in enumerate(metric)}
-        except:
-            metric_dict = None
-
-        return metric_dict
 
     def forward(self, x: torch.Tensor):
         return self.model(x)
@@ -141,111 +104,52 @@ class AudioLitModel(LightningModule):
 
     def training_step(self, batch: Any, batch_idx: int):
         loss, preds, targets = self.step(batch)
-
         # log train metrics
-        acc = self.train_accuracy(preds, targets)
-        f1 = self.metric_to_dict(self.train_f1(preds, targets))
-        prec = self.metric_to_dict(self.train_precision(preds, targets))
-        rec = self.metric_to_dict(self.train_recall(preds, targets))
-        self.log("train/loss", loss, on_step=False, on_epoch=True, prog_bar=False)
-        self.log("train/acc", acc, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/prec", prec, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("train/rec", rec, on_step=False, on_epoch=True, prog_bar=True)
+        f1 = self.f1_train(preds, targets)
+        f1 = metric_to_dict(self.classes, f1)
+        self.log("train/f1", f1, on_step = False, on_epoch = True, prog_bar = False)
+        self.log("train/loss", loss, on_step = False, on_epoch = True, prog_bar = False)
 
-        # we can return here dict with any tensors
         # and then read it in some callback or in training_epoch_end() below
         # remember to always return loss from training_step, or else backpropagation will fail!
         return {"loss": loss, "preds": preds, "targets": targets}
 
     def training_epoch_end(self, outputs: List[Any]):
         # log best so far train acc and train loss
-        self.metric_hist["train/acc"].append(self.trainer.callback_metrics["train/acc"])
-        self.metric_hist["train/loss"].append(
-            self.trainer.callback_metrics["train/loss"]
-        )
-        self.metric_hist["train/f1"].append(self.trainer.callback_metrics["train/f1"])
-        self.metric_hist["train/prec"].append(
-            self.trainer.callback_metrics["train/prec"]
-        )
-        self.metric_hist["train/rec"].append(self.trainer.callback_metrics["train/rec"])
-        self.log("train/acc_best", max(self.metric_hist["train/acc"]), prog_bar=False)
-        self.log("train/loss_best", min(self.metric_hist["train/loss"]), prog_bar=False)
-        self.log(
-            "train/f1_best",
-            self.metric_to_dict(max(self.metric_hist["train/acc"])),
-            prog_bar=False,
-        )
-        self.log(
-            "train/prec_best",
-            self.metric_to_dict(max(self.metric_hist["train/loss"])),
-            prog_bar=False,
-        )
-        self.log(
-            "train/rec_best",
-            self.metric_to_dict(max(self.metric_hist["train/loss"])),
-            prog_bar=False,
-        )
+        self.f1_hist["train"].append(self.trainer.callback_metrics["train/f1"])
+        self.loss_hist["train"].append(self.trainer.callback_metrics["train/loss"])
+
+        self.log("train/loss_best", min(self.loss_hist["train"]), prog_bar = False)
 
     def validation_step(self, batch: Any, batch_idx: int):
         loss, preds, targets = self.step(batch)
 
-        # log val metrics
-        acc = self.val_accuracy(preds, targets)
-        f1 = self.metric_to_dict(self.val_f1(preds, targets))
-        prec = self.metric_to_dict(self.val_precision(preds, targets))
-        rec = self.metric_to_dict(self.val_recall(preds, targets))
-        self.log("val/loss", loss, on_step=False, on_epoch=True, prog_bar=False)
-        self.log("val/acc", acc, on_step=False, on_epoch=True, prog_bar=False)
-        self.log("val/f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("val/prec", prec, on_step=False, on_epoch=True, prog_bar=False)
-        self.log("val/rec", rec, on_step=False, on_epoch=True, prog_bar=False)
+        f1 = self.f1_val(preds, targets)
+        f1 = metric_to_dict(self.classes, f1)
+        self.log("val/f1", f1, on_step = False, on_epoch = True, prog_bar = False)
+        self.log("val/loss", loss, on_step = False, on_epoch = True, prog_bar = False)
 
         return {"loss": loss, "preds": preds, "targets": targets}
 
     def validation_epoch_end(self, outputs: List[Any]):
-        # log best so far val acc and val loss
-        self.metric_hist["val/acc"].append(self.trainer.callback_metrics["val/acc"])
-        self.metric_hist["val/loss"].append(self.trainer.callback_metrics["val/loss"])
-        self.metric_hist["val/f1"].append(self.trainer.callback_metrics["val/f1"])
-        self.metric_hist["val/prec"].append(self.trainer.callback_metrics["val/prec"])
-        self.metric_hist["val/rec"].append(self.trainer.callback_metrics["val/rec"])
-        self.log("val/acc_best", max(self.metric_hist["val/acc"]), prog_bar=False)
-        self.log("val/loss_best", min(self.metric_hist["val/loss"]), prog_bar=False)
-        self.log(
-            "val/f1_best",
-            self.metric_to_dict(max(self.metric_hist["val/acc"])),
-            prog_bar=False,
-        )
-        self.log(
-            "val/prec_best",
-            self.metric_to_dict(max(self.metric_hist["val/loss"])),
-            prog_bar=False,
-        )
-        self.log(
-            "val/rec_best",
-            self.metric_to_dict(max(self.metric_hist["val/loss"])),
-            prog_bar=False,
-        )
+        self.f1_hist["val"].append(self.trainer.callback_metrics["val/f1"])
+        self.loss_hist["val"].append(self.trainer.callback_metrics["val/loss"])
+
+        self.log("val/loss_best", min(self.loss_hist["val"]), prog_bar = False)
+
 
     def test_step(self, batch: Any, batch_idx: int):
         loss, preds, targets = self.step(batch)
 
+        f1 = self.f1_test(preds, targets)
+        f1 = metric_to_dict(self.classes, f1)
+        self.log("test/f1", f1, on_step = False, on_epoch = True, prog_bar = False)
+        self.log("test/loss", loss, on_step = False, on_epoch = True, prog_bar = False)
         # log test metrics
-        acc = self.test_accuracy(preds, targets)
-        f1 = self.metric_to_dict(self.test_f1(preds, targets))
-        prec = self.metric_to_dict(self.test_precision(preds, targets))
-        rec = self.metric_to_dict(self.test_recall(preds, targets))
-        self.log("test/loss", loss, on_step=False, on_epoch=True)
-        self.log("test/acc", acc, on_step=False, on_epoch=True)
-        self.log("test/f1", f1, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/prec", prec, on_step=False, on_epoch=True, prog_bar=True)
-        self.log("test/rec", rec, on_step=False, on_epoch=True, prog_bar=True)
-
         return {"loss": loss, "preds": preds, "targets": targets}
 
-    # def test_epoch_end(self, outputs: List[Any]):
-    #     pass
+    def test_epoch_end(self, outputs: List[Any]):
+        pass
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
@@ -262,7 +166,7 @@ class AudioLitModel(LightningModule):
 
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
-            mode="max",
+            mode="min",
             factor=0.1,
             patience=10,
             threshold=0.0001,

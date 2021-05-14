@@ -1,5 +1,5 @@
-import torch.cat
-import torchaudio.transforms.Resample
+import torch
+import torchaudio
 
 def resample(aud, newsr):
     sig, sr = aud

@@ -18,53 +18,79 @@ seed: 12345
 
 trainer:
     _target_: pytorch_lightning.Trainer
-    gpus: 0
-    min_epochs: 1
-    max_epochs: 10
+    gpus: 1
+    min_epochs: 40
+    max_epochs: 200
     gradient_clip_val: 0.5
     accumulate_grad_batches: 2
-    weights_summary: null
+    weights_summary: "top"
     # resume_from_checkpoint: ${work_dir}/last.ckpt
 
 model:
-    _target_: src.models.mnist_model.MNISTLitModel
+    _target_: src.models.audio_model.AudioLitModel
     lr: 0.001
     weight_decay: 0.00005
-    architecture: SimpleDenseNet
-    input_size: 784
-    lin1_size: 256
-    lin2_size: 256
-    lin3_size: 128
-    output_size: 10
+    architecture: resnext50_32x4d
+    classes: ${classes}
+    sample_rate: ${sample_rate}
+    duration: ${duration}
+    n_mels: 64
+    n_fft: 1024 
+    hop_len: 512
+    top_db: 80
+    n_mfcc: 64
+
 
 datamodule:
-    _target_: src.datamodules.mnist_datamodule.MNISTDataModule
-    data_dir: ${data_dir}
-    batch_size: 64
-    train_val_test_split: [55_000, 5_000, 10_000]
-    num_workers: 0
+    _target_: src.datamodules.audio_datamodule.AudioDataModule
+    data_dir: ${data_dir}  
+    sample_rate: ${sample_rate}
+    duration: ${duration}
+    classes: ${classes}
+    batch_size: 10
+    train_val_test_split: [0.8, 0.1, 0.1]
+    num_workers: 5
     pin_memory: False
 
 callbacks:
     model_checkpoint:
         _target_: pytorch_lightning.callbacks.ModelCheckpoint
-        monitor: "val/acc"
+        monitor: "val/loss_best"
         save_top_k: 2
         save_last: True
-        mode: "max"
+        mode: "min"
         dirpath: 'checkpoints/'
-        filename: 'sample-mnist-{epoch:02d}'
+        filename: 'sample-audio-{epoch:02d}'
     early_stopping:
         _target_: pytorch_lightning.callbacks.EarlyStopping
-        monitor: "val/acc"
+        monitor: "val/loss_best"
         patience: 10
-        mode: "max"
+        mode: "min"
+    watch_model_with_wandb:
+        _target_: src.callbacks.wandb_callbacks.WatchModelWithWandb
+        log: "all"
+        log_freq: 100
 
 logger:
     wandb:
-        tags: ["best_model", "uwu"]
-        notes: "Description of this model."
-    neptune:
-        tags: ["best_model"]
-    csv_logger:
+        _target_: pytorch_lightning.loggers.wandb.WandbLogger
+        project: "endomic"
+        # entity: ""  # set to name of your wandb team or just remove it
+        # offline: False  # set True to store all logs only locally
+        job_type: "train"
+        group: ""
         save_dir: "."
+
+hydra:
+    # output paths for hydra logs
+    run:
+        dir: logs/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    sweep:
+        dir: logs/multiruns/${now:%Y-%m-%d_%H-%M-%S}
+        subdir: ${hydra.job.num}
+
+    # you can set here environment variables that are universal for all users
+    # for system specific variables (like data paths) it's better to use .env file!
+    job:
+        env_set:
+            HYDRA_FULL_ERROR: "1"

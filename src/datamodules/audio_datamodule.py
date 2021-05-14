@@ -1,17 +1,12 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 from pytorch_lightning import LightningDataModule
-from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
-import os
-import pathlib
-import pandas as pd
-from tqdm.auto import tqdm
-from sklearn.preprocessing import MultiLabelBinarizer
-from src.datamodules.datasets.audio_dataset import AudioDataset
+from torch.utils.data import DataLoader, Dataset, random_split
+# from src.datamodules.datasets.audio_dataset import AudioDataset
+import sys
 
-from torch.utils.data import Dataset
-import torchaudio
-
+sys.path.append("/home/lux_t1/Desktop")
+from data_store import AudioDatasetStrong
 
 class AudioDataModule(LightningDataModule):
     """
@@ -33,7 +28,7 @@ class AudioDataModule(LightningDataModule):
 
     def __init__(
         self,
-        classes: [],
+        classes: List,
         data_dir: str = "data/",
         train_val_test_split: Tuple[float, float, float] = (0.8, 0.1, 0.1),
         batch_size: int = 64,
@@ -59,7 +54,7 @@ class AudioDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set variables: self.data_train, self.data_val, self.data_test."""
-        dataset = AudioDataset(self.data_path, self.sample_rate, self.classes)
+        dataset = AudioDatasetStrong(self.sample_rate, self.classes, label_type ="weak")
         self.data_train, self.data_val, self.data_test = random_split(
             dataset, [int(_ * len(dataset)) for _ in self.train_val_test_split]
         )

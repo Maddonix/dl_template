@@ -6,6 +6,7 @@ import torchaudio
 from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import Dataset
 from tqdm.auto import tqdm
+from typing import List
 
 from src.utils.audio_utils import resample
 
@@ -13,7 +14,7 @@ from src.utils.audio_utils import resample
 class AudioDataset(Dataset):
     """Dataclass to load wavfiles from folder."""
 
-    def __init__(self, dir: str, sr: int, classes: []):
+    def __init__(self, dir: str, sr: int, classes: List):
         self.data_path = pathlib.Path(dir)
         assert self.data_path.exists()
         self.sr = sr

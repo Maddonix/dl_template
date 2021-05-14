@@ -1,6 +1,9 @@
 import dotenv
 import hydra
 from omegaconf import DictConfig
+import os
+
+os.environ["HYDRA_FULL_ERROR"] = "1"
 
 # load environment variables from `.env` file if it exists
 # recursively searches for `.env` in all folders starting from work dir
