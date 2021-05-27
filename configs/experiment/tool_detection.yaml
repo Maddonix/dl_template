@@ -1,0 +1,99 @@
+# @package _global_
+
+# to execute this experiment run:
+# python run.py experiment=example_full.yaml
+
+defaults:
+    - override /trainer: null  # override trainer to null so it's not loaded from main config defaults...
+    - override /model: null
+    - override /datamodule: null
+    - override /callbacks: null
+    - override /logger: null
+
+# we override default configurations with nulls to prevent them from loading at all
+# instead we define all modules and their paths directly in this config,
+# so everything is stored in one place
+
+seed: 12345
+
+trainer:
+    _target_: pytorch_lightning.Trainer
+    gpus: 1
+    min_epochs: 100
+    max_epochs: 400
+    gradient_clip_val: 0.5
+    accumulate_grad_batches: 2
+    weights_summary: "top"
+    # resume_from_checkpoint: ${work_dir}/last.ckpt
+
+model:
+    _target_: ukw_ml_tools.models.pl_tool_detection_resnet.ToolDetectionResnet #src.models.tool_detection_model.ToolDetectionModel
+    num_classes: 1
+    freeze_extractor: True
+    lr: 0.001
+    weight_decay: 0.00005
+
+datamodule:
+    _target_: ukw_ml_tools.datamodules.tool_detection_datamodule.ToolDetectionDataModule #src.datamodules.ls_img_datamodule.LSImgDataModule
+    data_dir: "/media/lux_t1/Samsung_T5/Tool_Detection/db/all_images_labeled_4.csv"
+    scaling: 75
+    num_classes: 1
+    batch_size: 100
+    train_val_test_split: [0.8, 0.1, 0.1]
+    num_workers: 16
+    pin_memory: False
+
+callbacks:
+    model_checkpoint:
+        _target_: pytorch_lightning.callbacks.ModelCheckpoint
+        monitor: "val/loss"
+        save_top_k: 2
+        save_last: True
+        mode: "min"
+        dirpath: 'checkpoints/'
+        filename: 'tool-detect-{epoch:02d}'
+    early_stopping:
+        _target_: pytorch_lightning.callbacks.EarlyStopping
+        monitor: "val/loss"
+        patience: 15
+        mode: "min"
+    watch_model_with_wandb:
+        _target_: src.callbacks.wandb_callbacks.WatchModelWithWandb
+        log: "all"
+        log_freq: 100
+    upload_code_as_artifact:
+      _target_: src.callbacks.wandb_callbacks.UploadCodeToWandbAsArtifact
+      code_dir: ${work_dir}/src
+    upload_ckpts_as_artifact:
+      _target_: src.callbacks.wandb_callbacks.UploadCheckpointsToWandbAsArtifact
+      ckpt_dir: "checkpoints/"
+      upload_best_only: True
+    log_f1_precision_recall_heatmap:
+        _target_: src.callbacks.wandb_callbacks.LogF1PrecRecHeatmapToWandb
+    log_confusion_matrix:
+        _target_: src.callbacks.wandb_callbacks.LogConfusionMatrixToWandb
+    log_images_with_predictions:
+        _target_: src.callbacks.wandb_callbacks.ImagePredictionLogger
+        num_samples: 8
+
+logger:
+    wandb:
+        _target_: pytorch_lightning.loggers.wandb.WandbLogger
+        project: "tool-detection"
+        job_type: "train"
+        group: ""
+        save_dir: "."
+
+hydra:
+    # output paths for hydra logs
+    run:
+        dir: logs/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    sweep:
+        dir: logs/multiruns/${now:%Y-%m-%d_%H-%M-%S}
+        subdir: ${hydra.job.num}
+
+    # you can set here environment variables that are universal for all users
+    # for system specific variables (like data paths) it's better to use .env file!
+    job:
+        env_set:
+            HYDRA_FULL_ERROR: "1"

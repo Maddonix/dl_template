@@ -2,6 +2,7 @@ import glob
 import os
 from typing import List
 
+from torch import sigmoid
 import matplotlib.pyplot as plt
 import seaborn as sn
 import torch
@@ -230,7 +231,10 @@ class ImagePredictionLogger(Callback):
             # run the batch through the network
             val_imgs = val_imgs.to(device=pl_module.device)
             logits = pl_module(val_imgs)
-            preds = torch.argmax(logits, axis=-1)
+            # preds = torch.argmax(logits, axis=-1)
+            preds = sigmoid(logits).squeeze()
+            preds[preds>=0.5]=1
+            preds[preds<0.5]=0
 
             # log the images as wandb Image
             experiment.log(
