@@ -27,7 +27,7 @@ trainer:
     # resume_from_checkpoint: ${work_dir}/last.ckpt
 
 model:
-    _target_: ukw_ml_tools.models.pl_tool_detection_resnet.ToolDetectionResnet #src.models.tool_detection_model.ToolDetectionModel
+    _target_: ukw_ml_tools.models.pl_ileum_detection_resnet.IleumDetectionResnet #src.models.tool_detection_model.ToolDetectionModel
     num_classes: 1
     freeze_extractor: True
     lr: 0.001
@@ -35,7 +35,7 @@ model:
 
 datamodule:
     _target_: ukw_ml_tools.datamodules.binary_image_classification_dm.BinaryImageClassificationDM #src.datamodules.ls_img_datamodule.LSImgDataModule
-    data_dir: "/media/lux_t1/Samsung_T5/Tool_Detection/db/all_images_labeled_4.csv"
+    data_dir: "/extreme_storage/dl_backend/train_data/ileum_detection.csv"
     scaling: 75
     num_classes: 1
     batch_size: 100
@@ -79,7 +79,7 @@ callbacks:
 logger:
     wandb:
         _target_: pytorch_lightning.loggers.wandb.WandbLogger
-        project: "ileum-detection"
+        project: "tool-detection"
         job_type: "train"
         group: ""
         save_dir: "."
